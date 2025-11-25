@@ -9,5 +9,5 @@
     ],
     "hidden_dim": 32,
     "output_dim": 1,
-    "model_path": "/home/richard/project/neurobranch_simp/models/kissat/v_1000_c_1000/neurobranch_model.pth"
+    "model_path": "/home/richard/project/neurobranch_simp/models/kissat/dropout/neurobranch_model.pth"
 }

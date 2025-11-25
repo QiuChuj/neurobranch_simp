@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import json
 import time
 from torch.nn import MSELoss
+from tqdm import tqdm
 
 class SimpleSATNet(nn.Module):
     """
@@ -86,64 +87,80 @@ class SimpleSATNet(nn.Module):
         train_losses = []
         val_losses = []
         
+        # 开始总的 Epoch 循环
         for epoch in range(epochs):
-            # 训练阶段
-            epoch_train_loss = 0.0
             start_time = time.time()
-            i = 0
             
-            for args_batch, labels_batch in train_loader:
-                i += 1
-                print("Training: file ", i)
-                
-                # 前向传播
-                # print("Forward:")
+            # =================== 训练阶段 ===================
+            self.train()  # 切换到训练模式 (启用 Dropout, BatchNorm 等)
+            epoch_train_loss = 0.0
+            
+            # 使用 tqdm 包装 train_loader
+            # desc: 进度条左边的描述文字
+            # leave=False: 本轮跑完后，进度条消失（如果想保留每一轮的进度条历史，改为 True）
+            train_pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}/{epochs} [Train]', unit='batch', leave=True)
+            
+            for args_batch, labels_batch in train_pbar:
+                # 1. 清空梯度
                 optimizer.zero_grad()
+                
+                # 2. 前向传播
                 output = self.forward(args_batch)
                 
-                # 计算损失
-                # print("Loss computation:")
+                # 3. 计算损失
                 loss = criterion(output, labels_batch)
                 
-                # 反向传播
-                # print("Loss backward:")
+                # 4. 反向传播
                 loss.backward()
-                #! 梯度裁剪
+                
+                # 5. 梯度裁剪
                 torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
-                # print("Loss backward complete.")
+                
+                # 6. 更新参数
                 optimizer.step()
                 
+                # 累计 Loss
                 epoch_train_loss += loss.item()
+                
+                # 【关键点】实时更新进度条右侧的 Loss 显示
+                # 这里显示的是当前 Batch 的 Loss，或者你也可以计算累计平均 Loss
+                train_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
             
-            # 计算平均训练损失
+            # 计算本轮平均训练损失
             avg_train_loss = epoch_train_loss / len(train_loader)
             train_losses.append(avg_train_loss)
             
-            # 验证阶段
+            # =================== 验证阶段 ===================
+            self.eval()  # 切换到评估模式
             epoch_val_loss = 0.0
-            with torch.no_grad():
-                for args_batch, labels_batch in val_loader:
-                    print("Evaluating:")
-                    # 解包批次数据
-                    
+            
+            # 使用 tqdm 包装 val_loader
+            val_pbar = tqdm(val_loader, desc=f'Epoch {epoch+1}/{epochs} [Val]  ', unit='batch', leave=True)
+            
+            with torch.no_grad(): # 验证阶段不需要计算梯度
+                for args_batch, labels_batch in val_pbar:
                     output = self.forward(args_batch)
                     loss = criterion(output, labels_batch)
                     epoch_val_loss += loss.item()
+                    
+                    # 实时更新验证集的 Loss
+                    val_pbar.set_postfix({'val_loss': f'{loss.item():.4f}'})
             
             avg_val_loss = epoch_val_loss / len(val_loader)
             val_losses.append(avg_val_loss)
             
-            # 打印训练信息
+            # =================== 打印统计信息 ===================
             epoch_time = time.time() - start_time
+            # 这一行会保留在屏幕上，作为日志
             print(f'Epoch {epoch+1}/{epochs} | '
                 f'Train Loss: {avg_train_loss:.6f} | '
                 f'Val Loss: {avg_val_loss:.6f} | '
                 f'Time: {epoch_time:.2f}s')
-        
-        # 保存训练好的模型
-        self.save()
-        print(f'Model saved to {self.model_path}')
-        
+            
+            # 如果想每一轮都保存，放在这里；如果只想保存最后一轮，移到循环外
+            self.save()
+
+        print(f'Training complete. Model saved to {self.model_path}')
         return train_losses, val_losses
     
     def apply(self, data_loader):
@@ -227,64 +244,80 @@ class VariableWiseNet(nn.Module):
         train_losses = []
         val_losses = []
         
+        # 开始总的 Epoch 循环
         for epoch in range(epochs):
-            # 训练阶段
-            epoch_train_loss = 0.0
             start_time = time.time()
-            i = 0
             
-            for args_batch, labels_batch in train_loader:
-                i += 1
-                print("Training: file ", i)
-                
-                # 前向传播
-                # print("Forward:")
+            # =================== 训练阶段 ===================
+            self.train()  # 切换到训练模式 (启用 Dropout, BatchNorm 等)
+            epoch_train_loss = 0.0
+            
+            # 使用 tqdm 包装 train_loader
+            # desc: 进度条左边的描述文字
+            # leave=False: 本轮跑完后，进度条消失（如果想保留每一轮的进度条历史，改为 True）
+            train_pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}/{epochs} [Train]', unit='batch', leave=True)
+            
+            for args_batch, labels_batch in train_pbar:
+                # 1. 清空梯度
                 optimizer.zero_grad()
+                
+                # 2. 前向传播
                 output = self.forward(args_batch)
                 
-                # 计算损失
-                # print("Loss computation:")
+                # 3. 计算损失
                 loss = criterion(output, labels_batch)
                 
-                # 反向传播
-                # print("Loss backward:")
+                # 4. 反向传播
                 loss.backward()
-                #! 梯度裁剪
+                
+                # 5. 梯度裁剪
                 torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
-                # print("Loss backward complete.")
+                
+                # 6. 更新参数
                 optimizer.step()
                 
+                # 累计 Loss
                 epoch_train_loss += loss.item()
+                
+                # 【关键点】实时更新进度条右侧的 Loss 显示
+                # 这里显示的是当前 Batch 的 Loss，或者你也可以计算累计平均 Loss
+                train_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
             
-            # 计算平均训练损失
+            # 计算本轮平均训练损失
             avg_train_loss = epoch_train_loss / len(train_loader)
             train_losses.append(avg_train_loss)
             
-            # 验证阶段
+            # =================== 验证阶段 ===================
+            self.eval()  # 切换到评估模式
             epoch_val_loss = 0.0
-            with torch.no_grad():
-                for args_batch, labels_batch in val_loader:
-                    print("Evaluating:")
-                    # 解包批次数据
-                    
+            
+            # 使用 tqdm 包装 val_loader
+            val_pbar = tqdm(val_loader, desc=f'Epoch {epoch+1}/{epochs} [Val]  ', unit='batch', leave=True)
+            
+            with torch.no_grad(): # 验证阶段不需要计算梯度
+                for args_batch, labels_batch in val_pbar:
                     output = self.forward(args_batch)
                     loss = criterion(output, labels_batch)
                     epoch_val_loss += loss.item()
+                    
+                    # 实时更新验证集的 Loss
+                    val_pbar.set_postfix({'val_loss': f'{loss.item():.4f}'})
             
             avg_val_loss = epoch_val_loss / len(val_loader)
             val_losses.append(avg_val_loss)
             
-            # 打印训练信息
+            # =================== 打印统计信息 ===================
             epoch_time = time.time() - start_time
+            # 这一行会保留在屏幕上，作为日志
             print(f'Epoch {epoch+1}/{epochs} | '
                 f'Train Loss: {avg_train_loss:.6f} | '
                 f'Val Loss: {avg_val_loss:.6f} | '
                 f'Time: {epoch_time:.2f}s')
-        
-        # 保存训练好的模型
-        self.save()
-        print(f'Model saved to {self.model_path}')
-        
+            
+            # 如果想每一轮都保存，放在这里；如果只想保存最后一轮，移到循环外
+            self.save()
+
+        print(f'Training complete. Model saved to {self.model_path}')
         return train_losses, val_losses
     
     def apply(self, data_loader):
