@@ -109,7 +109,7 @@ class SimpleSATNet(nn.Module):
                 output = self.forward(args_batch)
                 
                 # 3. 计算损失
-                loss = criterion(output, labels_batch)
+                loss = criterion(output, labels_batch.to(self.device))
                 
                 # 4. 反向传播
                 loss.backward()
@@ -141,7 +141,7 @@ class SimpleSATNet(nn.Module):
             with torch.no_grad(): # 验证阶段不需要计算梯度
                 for args_batch, labels_batch in val_pbar:
                     output = self.forward(args_batch)
-                    loss = criterion(output, labels_batch)
+                    loss = criterion(output, labels_batch.to(self.device))
                     epoch_val_loss += loss.item()
                     
                     # 实时更新验证集的 Loss
@@ -267,7 +267,7 @@ class VariableWiseNet(nn.Module):
                 output = self.forward(args_batch)
                 
                 # 3. 计算损失
-                loss = criterion(output, labels_batch)
+                loss = criterion(output, labels_batch.to(self.device))
                 
                 # 4. 反向传播
                 loss.backward()
@@ -299,7 +299,7 @@ class VariableWiseNet(nn.Module):
             with torch.no_grad(): # 验证阶段不需要计算梯度
                 for args_batch, labels_batch in val_pbar:
                     output = self.forward(args_batch)
-                    loss = criterion(output, labels_batch)
+                    loss = criterion(output, labels_batch.to(self.device))
                     epoch_val_loss += loss.item()
                     
                     # 实时更新验证集的 Loss
