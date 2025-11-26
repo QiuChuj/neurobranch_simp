@@ -63,7 +63,7 @@ class TrainDataset(Dataset):
         
     def _get_file_pairs(self):
         """获取匹配的CNF和CSV文件对"""
-        data_files = [f for f in os.listdir(self.data_dir) if f.endswith('.cnf')]
+        data_files = [f for f in os.listdir(self.data_dir) if f.endswith('.csv')]
         label_files = [f for f in os.listdir(self.label_dir) if f.endswith('.csv')]
         
         file_pairs = []

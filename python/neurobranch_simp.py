@@ -35,6 +35,7 @@ class SimpleSATNet(nn.Module):
         
         self.network = nn.Sequential(*layers)
         self.train_mode = params["train_mode"]
+        self.new_model = params["new_model"]
         self.model_path = params["model_path"]
         # 将模型移到指定设备
         if not self.train_mode:
@@ -190,6 +191,7 @@ class VariableWiseNet(nn.Module):
             nn.Linear(hidden_dim // 2, output_dim)
         )
         self.train_mode = params["train_mode"]
+        self.new_model = params["new_model"]
         self.model_path = params["model_path"]
         # 将模型移到指定设备
         if not self.train_mode:

@@ -1,6 +1,6 @@
 {
     "use_shared_weights": true,
-    "new_model": true,
+    "new_model": false,
     "train_mode": true,
     "input_dim": 8,
     "hidden_dims": [
@@ -9,5 +9,5 @@
     ],
     "hidden_dim": 32,
     "output_dim": 1,
-    "model_path": "/home/richard/project/neurobranch_simp/models/kissat/dropout/neurobranch_model.pth"
+    "model_path": "/home/richard/project/neurobranch_simp/models/kissat/shared_weights/neurobranch_model.pth"
 }
