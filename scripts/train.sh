@@ -17,7 +17,7 @@ CONFIG_FILE="/home/richard/project/neurobranch_simp/configs/params.json"
 # 训练脚本路径
 TRAIN_SCRIPT="/home/richard/project/neurobranch_simp/python/train.py"
 # 抽样比例 (20%)
-SAMPLE_RATIO=0.2
+SAMPLE_RATIO=0.1
 # 日志文件
 LOG_FILE="/home/richard/project/neurobranch_simp/logs/training.log"
 

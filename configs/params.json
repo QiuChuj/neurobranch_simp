@@ -2,7 +2,7 @@
     "use_shared_weights": true,
     "new_model": false,
     "train_mode": true,
-    "input_dim": 8,
+    "input_dim": 9,
     "hidden_dims": [
         64,
         32
