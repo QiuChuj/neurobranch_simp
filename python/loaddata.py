@@ -9,7 +9,7 @@ import pandas as pd
 class ApplyDataset(Dataset):
     """从共享内存加载数据的简化数据集类"""
 
-    def __init__(self, shm_name="/tmp/nn_shared", size=(1000, 9)):
+    def __init__(self, shm_name="/tmp/neurobranch_simp", size=(1000, 9)):
         self.shm_name = shm_name
         self.size = size
         self.total_elements = size[0] * size[1]
