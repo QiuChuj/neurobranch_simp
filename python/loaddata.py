@@ -6,58 +6,6 @@ import os
 import pandas as pd
 
 
-class ApplyDataset(Dataset):
-    """从共享内存加载数据的简化数据集类"""
-
-    def __init__(self, shm_name="/tmp/neurobranch_simp", size=(1000, 9)):
-        self.shm_name = shm_name
-        self.size = size
-        self.total_elements = size[0] * size[1]
-
-    def __len__(self):
-        return 1
-
-    def __getitem__(self, idx):
-        """从共享内存读取数据"""
-        try:
-            # 连接到共享内存
-            shm = sysv_ipc.SharedMemory(self.shm_name)
-
-            # 读取原始字节数据
-            data_bytes = shm.read()
-
-            # 转换为numpy数组（假设数据是float32格式）
-            data_array = np.frombuffer(data_bytes, dtype=np.float32)
-
-            # 重塑为正确形状
-            if len(data_array) >= self.total_elements:
-                data_array = data_array[: self.total_elements].reshape(self.size)
-            else:
-                # 数据长度不匹配，用零填充
-                padded_data = np.zeros(self.total_elements, dtype=np.float32)
-                padded_data[: len(data_array)] = data_array
-                data_array = padded_data.reshape(self.size)
-
-            # 转换为PyTorch张量
-            data_tensor = torch.FloatTensor(data_array)
-
-            return data_tensor
-
-        except sysv_ipc.ExistentialError:
-            print(f"错误: 共享内存 {self.shm_name} 不存在")
-            # 返回零张量作为后备
-            return torch.zeros(self.size, dtype=torch.float32)
-        except Exception as e:
-            print(f"读取共享内存时出错: {e}")
-            return torch.zeros(self.size, dtype=torch.float32)
-
-
-def create_data_loader():
-    dataset = ApplyDataset()
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)
-    return dataloader
-
-
 class TrainDataset(Dataset):
     def __init__(self, data_dir, label_dir):
         self.data_dir = data_dir

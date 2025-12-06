@@ -179,6 +179,7 @@ class SimpleSATNet(nn.Module):
 
     def apply(self, data_loader):
         for args_batch in data_loader:
+            print("Shape of input: ", args_batch.shape)
             output = self.forward(args_batch)
         return output
 
