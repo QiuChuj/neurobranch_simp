@@ -80,7 +80,7 @@ def create_dataloader_from_shared_struct(shared_struct: SharedData) -> DataLoade
     features_np = np.array(features_np, dtype=np.float32, copy=True)
 
     # 转为 tensor, shape (1000, 9)
-    features_tensor = torch.from_numpy(features_np)  # float32
+    features_tensor = torch.from_numpy(features_np).T  # float32
 
     dataset = SharedFeaturesDataset(features_tensor)
 
