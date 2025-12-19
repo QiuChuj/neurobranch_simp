@@ -1,6 +1,4 @@
-import numpy as np
 import torch
-import sysv_ipc
 from torch.utils.data import Dataset, DataLoader
 import os
 import pandas as pd
