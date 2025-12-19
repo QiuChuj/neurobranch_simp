@@ -1,7 +1,10 @@
 #!/bin/bash
 
 # NeuroBranch 增量训练脚本
-# 功能：分层抽样20%的问题，并进行多轮增量训练
+# 功能：分层抽样部分问题，并进行多轮增量训练
+# 更新：对所有 benchmark 目录做分组，
+#      仅当某基础问题类型实例数 > SAMPLE_THRESHOLD 时才按 SAMPLE_RATIO 抽样，
+#      其他类型的所有实例全部加入训练。
 
 # ========================
 # 配置参数区（请根据实际情况修改）
@@ -16,8 +19,12 @@ TRAIN_LABEL_DIR="/home/richard/project/neurobranch_simp/dimacs/label"
 CONFIG_FILE="/home/richard/project/neurobranch_simp/configs/params.json"
 # 训练脚本路径
 TRAIN_SCRIPT="/home/richard/project/neurobranch_simp/python/train.py"
-# 抽样比例 (20%)
-SAMPLE_RATIO=0.1
+# 抽样比例（仅在某基础问题类型实例数 > SAMPLE_THRESHOLD 时生效）
+SAMPLE_RATIO=0.2
+# 只有当某基础问题类型的实例数量 > 该阈值时，才对其做分层抽样
+SAMPLE_THRESHOLD=100
+# 抽样结果文件
+SELECTED_FILE="/home/richard/project/neurobranch_simp/logs/selected_problems.txt"
 # 日志文件
 LOG_FILE="/home/richard/project/neurobranch_simp/logs/training.log"
 
@@ -50,48 +57,69 @@ check_paths() {
     log_message "路径检查完成"
 }
 
+# 分层抽样 / 全量选择
 stratified_sampling() {
-    log_message "开始分层抽样，抽样比例: $SAMPLE_RATIO"
+    log_message "开始分层抽样: 抽样比例 = $SAMPLE_RATIO，仅当某基础类型实例数 > $SAMPLE_THRESHOLD 时启用抽样"
     
-    # 1. 获取所有基础问题类型（关键修正：去掉末尾数字编号后去重）
-    local base_types=($(find "$DATA_SOURCE/data" -maxdepth 1 -type d -name "*_*" | sed 's|.*/||' | sed 's/_[0-9][0-9]*$//' | sort | uniq))
-    # 注：sed 's/_[0-9][0-9]*$//' 会移除目录名末尾的 _数字 部分（如 BMS_k3_n100_m429_0 -> BMS_k3_n100_m429）
-    
-    if [ ${#base_types[@]} -eq 0 ]; then
-        error_exit "在 $DATA_SOURCE/data 中未找到任何问题类型"
+    local data_root="$DATA_SOURCE/data"
+
+    # 收集所有一级子目录（问题实例目录名）
+    mapfile -t all_dirs < <(find "$data_root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+
+    if [ ${#all_dirs[@]} -eq 0 ]; then
+        error_exit "在 $data_root 中未找到任何问题实例目录"
     fi
-    
-    log_message "发现 ${#base_types[@]} 种基础问题类型: ${base_types[*]}"
-    
-    # 清空之前的抽样结果
-    > "/home/richard/project/neurobranch_simp/logs/selected_problems.txt"
-    
-    # 2. 对每种基础问题类型进行抽样
-    for base_type in "${base_types[@]}"; do
-        # 获取该基础类型下的所有具体问题实例（完整目录名）
-        local instances=($(find "$DATA_SOURCE/data" -name "${base_type}_*" -type d | sed 's|.*/||' | sort))
-        
-        if [ ${#instances[@]} -eq 0 ]; then
-            log_message "警告: 基础类型 $base_type 下未找到实例，跳过"
-            continue
-        fi
-        
-        # 计算该类型需要抽样的数量（至少1个）
-        local type_count=${#instances[@]}
-        local sample_count=$(echo "$type_count * $SAMPLE_RATIO" | bc | awk '{printf "%.0f\n", $1}')
-        [ $sample_count -eq 0 ] && sample_count=1
-        
-        log_message "基础类型 $base_type: 共 $type_count 个实例，抽样 $sample_count 个"
-        
-        # 随机抽样：使用 shuf 打乱实例顺序并抽取所需数量[7,8](@ref)
-        printf "%s\n" "${instances[@]}" | shuf | head -n "$sample_count" >> "/home/richard/project/neurobranch_simp/logs/selected_problems.txt"
+
+    # 使用关联数组将实例按 base_type 分组
+    # base_type 的定义：将目录名末尾的 _数字 去掉后的部分
+    # 例如 BMS_k3_n100_m429_0 -> BMS_k3_n100_m429
+    declare -A groups
+
+    for d in "${all_dirs[@]}"; do
+        # 提取基础类型
+        local base_type
+        base_type=$(echo "$d" | sed 's/_[0-9][0-9]*$//')
+        # 防御性：如果意外为空，则退回原名
+        [ -z "$base_type" ] && base_type="$d"
+        # 将该实例加入对应基础类型的列表（用空格分隔）
+        groups["$base_type"]+="$d "
     done
-    
+
+    log_message "发现 ${#groups[@]} 种基础问题类型"
+
+    # 清空之前的抽样结果文件
+    : > "$SELECTED_FILE"
+
+    # 遍历每一种基础类型，按规则决定抽样或全选
+    for base_type in "${!groups[@]}"; do
+        # 取出该基础类型下的所有实例名
+        IFS=' ' read -r -a instances <<< "${groups[$base_type]}"
+        local type_count=${#instances[@]}
+
+        if (( type_count > SAMPLE_THRESHOLD )); then
+            # 该基础类型实例数大于阈值，执行分层抽样
+            local sample_count
+            sample_count=$(echo "$type_count * $SAMPLE_RATIO" | bc | awk '{printf "%.0f\n", $1}')
+            # 理论上 type_count > 100 且 SAMPLE_RATIO>0 时 sample_count >= 1
+            [ "$sample_count" -lt 1 ] && sample_count=1
+
+            log_message "基础类型 $base_type: 共 $type_count 个实例，抽样 $sample_count 个"
+
+            # 随机打乱实例并抽取所需数量
+            printf "%s\n" "${instances[@]}" | shuf | head -n "$sample_count" >> "$SELECTED_FILE"
+        else
+            # 实例数不超过阈值，全部选入
+            log_message "基础类型 $base_type: 共 $type_count 个实例（≤ $SAMPLE_THRESHOLD），全部选入"
+            printf "%s\n" "${instances[@]}" >> "$SELECTED_FILE"
+        fi
+    done
+
     # 打乱最终选中的问题顺序（避免训练顺序偏差）
-    shuf "/home/richard/project/neurobranch_simp/logs/selected_problems.txt" > "/home/richard/project/neurobranch_simp/logs/selected_problems.tmp"
-    mv "/home/richard/project/neurobranch_simp/logs/selected_problems.tmp" "/home/richard/project/neurobranch_simp/logs/selected_problems.txt"
+    shuf "$SELECTED_FILE" > "${SELECTED_FILE}.tmp"
+    mv "${SELECTED_FILE}.tmp" "$SELECTED_FILE"
     
-    local total_selected=$(wc -l < "/home/richard/project/neurobranch_simp/logs/selected_problems.txt")
+    local total_selected
+    total_selected=$(wc -l < "$SELECTED_FILE")
     log_message "分层抽样完成，共选择 $total_selected 个问题实例"
 }
 
@@ -101,7 +129,7 @@ clean_training_dirs() {
     rm -rf "$TRAIN_DATA_DIR"/* "$TRAIN_LABEL_DIR"/*
 }
 
-# 复制数据到训练目录（修正版）
+# 复制数据到训练目录
 copy_problem_data() {
     local problem_name="$1"
     log_message "复制问题数据: $problem_name"
@@ -111,10 +139,9 @@ copy_problem_data() {
     if [ -d "$source_data_dir" ]; then
         # 检查源目录是否有文件
         if ls "$source_data_dir"/* >/dev/null 2>&1; then
-            # 使用cp命令复制所有文件到目标目录根下 [1,5](@ref)
             cp "$source_data_dir"/* "$TRAIN_DATA_DIR/" 2>/dev/null || {
-                # 如果通配符复制失败，尝试使用find命令更安全地复制 [4,5](@ref)
-                find "$source_data_dir" -maxdepth 1 -type f -exec cp {} "$TRAIN_DATA_DIR/" \; || error_exit "复制data数据失败: $problem_name"
+                find "$source_data_dir" -maxdepth 1 -type f -exec cp {} "$TRAIN_DATA_DIR/" \; \
+                    || error_exit "复制data数据失败: $problem_name"
             }
             log_message "成功复制 $(ls "$source_data_dir" | wc -l) 个data文件"
         else
@@ -131,7 +158,8 @@ copy_problem_data() {
     if [ -d "$source_label_dir" ]; then
         if ls "$source_label_dir"/* >/dev/null 2>&1; then
             cp "$source_label_dir"/* "$TRAIN_LABEL_DIR/" 2>/dev/null || {
-                find "$source_label_dir" -maxdepth 1 -type f -exec cp {} "$TRAIN_LABEL_DIR/" \; || error_exit "复制label数据失败: $problem_name"
+                find "$source_label_dir" -maxdepth 1 -type f -exec cp {} "$TRAIN_LABEL_DIR/" \; \
+                    || error_exit "复制label数据失败: $problem_name"
             }
             log_message "成功复制 $(ls "$source_label_dir" | wc -l) 个label文件"
         else
@@ -151,12 +179,10 @@ update_training_config() {
     local is_new_model="$1"
     log_message "更新训练配置: new_model = $is_new_model"
     
-    # 使用sed修改JSON配置[1](@ref)
     if command -v jq >/dev/null 2>&1; then
-        # 如果有jq工具，使用jq更安全地修改JSON
-        jq --argjson new_model "$is_new_model" '.new_model = $new_model' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+        jq --argjson new_model "$is_new_model" '.new_model = $new_model' "$CONFIG_FILE" \
+            > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
     else
-        # 使用sed作为备选方案
         sed -i "s/\"new_model\":.*$/\"new_model\": $is_new_model/g" "$CONFIG_FILE"
     fi
 }
@@ -168,7 +194,6 @@ run_training() {
     
     log_message "开始第 $round 轮训练，问题: $problem_name"
     
-    # 执行Python训练脚本
     cd "$(dirname "$TRAIN_SCRIPT")" || error_exit "无法切换到训练脚本目录"
     
     if python3 "$(basename "$TRAIN_SCRIPT")" 2>&1 | tee -a "$LOG_FILE"; then
@@ -188,11 +213,11 @@ main() {
     # 检查环境
     check_paths
     
-    # 执行分层抽样
+    # 执行分层抽样 / 全量选择
     stratified_sampling
     
     # 读取抽样结果
-    mapfile -t selected_problems < "/home/richard/project/neurobranch_simp/logs/selected_problems.txt"
+    mapfile -t selected_problems < "$SELECTED_FILE"
     
     if [ ${#selected_problems[@]} -eq 0 ]; then
         error_exit "没有抽到任何问题实例，无法开始训练"
@@ -215,17 +240,19 @@ main() {
         round=$((i+1))
         log_message "=== 开始第 $round 轮训练（增量训练）==="
         clean_training_dirs
-        copy_problem_data "${selected_problems[i]}" || { log_message "跳过问题 ${selected_problems[i]}"; continue; }
+        copy_problem_data "${selected_problems[i]}" || { 
+            log_message "跳过问题 ${selected_problems[i]}"
+            continue
+        }
         run_training "$round" "${selected_problems[i]}"
     done
     
     # 清理临时文件
-    rm -f "/home/richard/project/neurobranch_simp/logs/selected_problems.txt"
+    rm -f "$SELECTED_FILE"
     
     log_message "=== 所有训练轮次完成！共完成了 ${#selected_problems[@]} 轮训练 ==="
     log_message "训练日志已保存至: $LOG_FILE"
 }
 
-# 执行主函数（带有错误处理）
 trap 'error_exit "脚本被用户中断"' INT TERM
 main "$@"

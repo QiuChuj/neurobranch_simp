@@ -3,7 +3,7 @@
     "label_dir": "/home/richard/project/neurobranch_simp/dimacs/label",
     "batch_size": 10,
     "val_split": 0.2,
-    "max_vars": 1000,
-    "learning_rate": 0.001,
-    "epochs": 20
+    "max_vars": 10000,
+    "learning_rate": 0.00002,
+    "epochs": 50
 }

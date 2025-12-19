@@ -1,7 +1,7 @@
 {
     "use_shared_weights": true,
     "new_model": false,
-    "train_mode": false,
+    "train_mode": true,
     "input_dim": 9,
     "hidden_dims": [
         64,
@@ -9,5 +9,5 @@
     ],
     "hidden_dim": 32,
     "output_dim": 1,
-    "model_path": "/home/richard/project/neurobranch_simp/models/kissat/shared_weights/neurobranch_model.pth"
+    "model_path": "/home/richard/project/neurobranch_simp/models/kissat/shared_weights/neurobranch_model_10000.pth"
 }
