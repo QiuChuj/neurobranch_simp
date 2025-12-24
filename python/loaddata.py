@@ -47,44 +47,59 @@ class TrainDataset(Dataset):
     def _parse_data(self, data_path):
         """
         读取 features.bin：
-        - C 端写入的是 10000 x 9 个 double，按行顺序
-        - 这里用 numpy.fromfile 读取为 float64，再 reshape 为 (10000, 9)
+        - 现在 C 端可能写入的是 <= max_vars * num_features 个 double
+        - 若不足 expected_size，则在尾部补 0，补成 (max_vars, num_features)
         """
-        expected_size = self.max_vars * self.num_features  # 10000 * 9 = 9000
+        expected_size = self.max_vars * self.num_features  # 10000 * 9 = 90000
 
         arr = np.fromfile(data_path, dtype=np.float64)
-        if arr.size != expected_size:
-            raise ValueError(
-                f"数据文件大小不匹配: {data_path}, "
-                f"读取到 {arr.size} 个 double, 期望 {expected_size}"
-            )
+        actual_size = arr.size
 
-        arr = arr.reshape(self.max_vars, self.num_features)  # (10000, 9)
+        if actual_size > expected_size:
+            # 数据比预期还大，说明写入格式有问题，仍然报错
+            raise ValueError(
+                f"数据文件大小超出预期: {data_path}, "
+                f"读取到 {actual_size} 个 double, 期望至多 {expected_size}"
+            )
+        elif actual_size < expected_size:
+            # 不足时在尾部补 0
+            padded = np.zeros(expected_size, dtype=np.float64)
+            padded[:actual_size] = arr
+            arr = padded
+
+        # 现在 arr 一定是 expected_size 长度
+        arr = arr.reshape(self.max_vars, self.num_features)  # (max_vars, num_features)
 
         # 转为 torch.float32
         data_tensor = torch.from_numpy(arr.astype(np.float32))
-        return data_tensor  # shape: (10000, 9)
+        return data_tensor  # shape: (max_vars, num_features)
 
     def _parse_labels(self, label_path):
         """
         读取 scores.bin：
-        - C 端写入的是 10000 个 double
-        - 这里读成 (10000, 1)，保持和原来 CSV 读出来的形状相近
+        - 现在 C 端可能写入的是 <= max_vars 个 double
+        - 若不足 expected_size，则在尾部补 0，补成 (max_vars, 1)
         """
         expected_size = self.max_vars  # 10000
 
         arr = np.fromfile(label_path, dtype=np.float64)
-        if arr.size != expected_size:
-            raise ValueError(
-                f"标签文件大小不匹配: {label_path}, "
-                f"读取到 {arr.size} 个 double, 期望 {expected_size}"
-            )
+        actual_size = arr.size
 
-        # (10000,) -> (10000, 1)
+        if actual_size > expected_size:
+            raise ValueError(
+                f"标签文件大小超出预期: {label_path}, "
+                f"读取到 {actual_size} 个 double, 期望至多 {expected_size}"
+            )
+        elif actual_size < expected_size:
+            padded = np.zeros(expected_size, dtype=np.float64)
+            padded[:actual_size] = arr
+            arr = padded
+
+        # (max_vars,) -> (max_vars, 1)
         arr = arr.reshape(self.max_vars, 1)
 
         label_tensor = torch.from_numpy(arr.astype(np.float32))
-        return label_tensor  # shape: (10000, 1)
+        return label_tensor  # shape: (max_vars, 1)
 
 
 def create_data_loaders(data_dir, label_dir, batch_size, val_split,
