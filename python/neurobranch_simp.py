@@ -10,8 +10,8 @@ from tqdm import tqdm
 class SimpleSATNet(nn.Module):
     """
     简化的SAT启发式分数预测网络
-    输入: [batch_size, 1000, 9] 或 [1000, 9]
-    输出: [batch_size, 1000, 1] 或 [1000, 1]
+    输入: [batch_size, VARS, 9] 或 [VARS, 9]
+    输出: [batch_size, VARS, 1] 或 [VARS, 1]
     """
 
     def __init__(self, params):
@@ -53,28 +53,28 @@ class SimpleSATNet(nn.Module):
     def forward(self, x):
         """
         前向传播
-        x: 形状为 [batch, 1000, 9] 或 [1000, 9]
-        返回: 形状为 [batch, 1000, 1] 或 [1000, 1]
+        x: 形状为 [batch, VARS, 9] 或 [VARS, 9]
+        返回: 形状为 [batch, VARS, 1] 或 [VARS, 1]
         """
         original_shape = x.shape
 
         # 如果输入是3D [batch, vars, features]，重塑为2D用于处理
         if len(original_shape) == 3:
             batch_size, num_vars, num_features = original_shape
-            x = x.view(-1, num_features).detach().to(self.device)  # [batch*1000, 9]
+            x = x.view(-1, num_features).detach().to(self.device)  # [batch*VARS, 9]
         else:
             batch_size = 1
             num_vars = original_shape[0]
-            x = x.view(-1, original_shape[1]).detach().to(self.device)  # [1000, 9]
+            x = x.view(-1, original_shape[1]).detach().to(self.device)  # [VARS, 9]
 
         # 通过网络处理
-        output = self.network(x)  # [batch*1000, 1] 或 [1000, 1]
+        output = self.network(x)  # [batch*VARS, 1] 或 [VARS, 1]
 
         # 恢复原始形状
         if len(original_shape) == 3:
-            output = output.view(batch_size, num_vars, -1)  # [batch, 1000, 1]
+            output = output.view(batch_size, num_vars, -1)  # [batch, VARS, 1]
         else:
-            output = output.view(num_vars, -1)  # [1000, 1]
+            output = output.view(num_vars, -1)  # [VARS, 1]
 
         return output
 
@@ -223,8 +223,8 @@ class VariableWiseNet(nn.Module):
     def forward(self, x):
         """
         前向传播 - 对每个变量独立应用网络
-        x: [batch, 1000, 9] 或 [1000, 9]
-        返回: [batch, 1000, 1] 或 [1000, 1]
+        x: [batch, VARS, 9] 或 [VARS, 9]
+        返回: [batch, VARS, 1] 或 [VARS, 1]
         """
         original_shape = x.shape
 
@@ -237,18 +237,18 @@ class VariableWiseNet(nn.Module):
                 var_output = self.var_processor(var_features)  # [batch, 1]
                 outputs.append(var_output)
 
-            # 组合结果 [batch, 1000, 1]
+            # 组合结果 [batch, VARS, 1]
             return torch.stack(outputs, dim=1)
 
         else:
-            # 单样本情况 [1000, 9]
+            # 单样本情况 [VARS, 9]
             outputs = []
             for i in range(original_shape[0]):
                 var_features = x[i : i + 1, :].detach().to(self.device)  # [1, 9]
                 var_output = self.var_processor(var_features)  # [1, 1]
                 outputs.append(var_output)
 
-            return torch.cat(outputs, dim=0)  # [1000, 1]
+            return torch.cat(outputs, dim=0)  # [VARS, 1]
 
     def save(self):
         torch.save(self.state_dict(), self.model_path)
