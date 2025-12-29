@@ -2,18 +2,22 @@ import sysv_ipc
 import ctypes
 import numpy as np
 import time
+import json
 
 import torch
 from torch.utils.data import Dataset, DataLoader
 
 from neurobranch_simp import create_simple_model
 
+with open("/home/richard/project/neurobranch_simp/configs/config.json") as f:
+    config = json.load(f)
+SIMP_VAR = config['max_vars']
 
 # 定义与C结构体完全匹配的ctypes结构
 class SharedData(ctypes.Structure):
     _fields_ = [
-        ("features", ctypes.c_double * 1000 * 9),
-        ("result", ctypes.c_double * 1000),
+        ("features", ctypes.c_double * SIMP_VAR * 9),
+        ("result", ctypes.c_double * SIMP_VAR),
         ("ready", ctypes.c_int),
         ("n_vars", ctypes.c_uint),
         ("n_clauses", ctypes.c_uint),
@@ -27,7 +31,7 @@ class SharedFeaturesDataset(Dataset):
     """
 
     def __init__(self, features_tensor: torch.Tensor):
-        # features_tensor: shape (1000, 9), float32
+        # features_tensor: shape (SIMP_VAR, 9), float32
         self.features_tensor = features_tensor
 
     def __len__(self):
@@ -35,11 +39,11 @@ class SharedFeaturesDataset(Dataset):
         return 1
 
     def __getitem__(self, idx):
-        # 返回整块 (1000, 9) 特征
+        # 返回整块 (SIMP_VAR, 9) 特征
         return self.features_tensor
 
 
-def tensor_to_c_array(tensor, target_size=1000):
+def tensor_to_c_array(tensor, target_size=SIMP_VAR):
     """
     高效地将Tensor转换为c_double数组（用于写回 result[]）
     """
@@ -70,16 +74,16 @@ def create_dataloader_from_shared_struct(shared_struct: SharedData) -> DataLoade
     """
     从 SharedData.features 中构造一个 DataLoader，行为等价于原来的 create_data_loader()：
       - Dataset.__len__ == 1
-      - __getitem__ 返回 (1000, 9) 的 tensor
-      - DataLoader(batch_size=1) -> 单个 batch，shape 为 (1, 1000, 9)
+      - __getitem__ 返回 (SIMP_VAR, 9) 的 tensor
+      - DataLoader(batch_size=1) -> 单个 batch，shape 为 (1, SIMP_VAR, 9)
     """
-    # 注意：features 是 c_double[1000 * 9]，这里直接指定形状 (1000, 9)
-    features_np = np.ctypeslib.as_array(shared_struct.features, shape=(1000, 9))
+    # 注意：features 是 c_double[SIMP_VAR * 9]，这里直接指定形状 (SIMP_VAR, 9)
+    features_np = np.ctypeslib.as_array(shared_struct.features, shape=(SIMP_VAR, 9))
 
     # 转为 float32，并拷贝一份，避免只读缓冲区问题
     features_np = np.array(features_np, dtype=np.float32, copy=True)
 
-    # 转为 tensor, shape (1000, 9)
+    # 转为 tensor, shape (SIMP_VAR, 9)
     features_tensor = torch.from_numpy(features_np).T  # float32
 
     dataset = SharedFeaturesDataset(features_tensor)
