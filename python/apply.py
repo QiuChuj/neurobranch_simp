@@ -3,6 +3,8 @@ import ctypes
 import numpy as np
 import time
 import json
+import argparse
+import os
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -98,12 +100,12 @@ def create_dataloader_from_shared_struct(shared_struct: SharedData) -> DataLoade
     return dataloader
 
 
-def python_nn_process():
+def python_nn_process(filename):
     try:
         net = create_simple_model()
 
         # 生成相同的key（与C程序一致）
-        key = sysv_ipc.ftok("/tmp/neurobranch_simp", 84)
+        key = sysv_ipc.ftok(filename, 84)
 
         # 计算结构体大小
         struct_size = ctypes.sizeof(SharedData)
@@ -162,4 +164,13 @@ def python_nn_process():
 
 
 if __name__ == "__main__":
-    python_nn_process()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--worker-id", type=int, default=0, help="Worker ID for parallel execusion")
+    args = parser.parse_args()
+    
+    # 根据 ID 生成唯一的文件路径或 Key
+    SHM_FILE = f"/tmp/neurobranch_simp_{args.worker_id}"
+    
+    # 确保文件存在
+    os.system(f"touch {SHM_FILE}")
+    python_nn_process(SHM_FILE)
