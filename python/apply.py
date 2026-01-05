@@ -5,6 +5,7 @@ import time
 import json
 import argparse
 import os
+import sys
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -100,12 +101,12 @@ def create_dataloader_from_shared_struct(shared_struct: SharedData) -> DataLoade
     return dataloader
 
 
-def python_nn_process(filename):
+def python_nn_process(SHM_FILE):
     try:
         net = create_simple_model()
 
         # 生成相同的key（与C程序一致）
-        key = sysv_ipc.ftok(filename, 84)
+        key = sysv_ipc.ftok(SHM_FILE, 84)
 
         # 计算结构体大小
         struct_size = ctypes.sizeof(SharedData)
@@ -164,13 +165,19 @@ def python_nn_process(filename):
 
 
 if __name__ == "__main__":
+    print("[apply] 进程启动", flush=True)
+    print(f"[apply] argv = {sys.argv}", flush=True)
+    
     parser = argparse.ArgumentParser()
     parser.add_argument("--worker-id", type=int, default=0, help="Worker ID for parallel execusion")
     args = parser.parse_args()
     
     # 根据 ID 生成唯一的文件路径或 Key
     SHM_FILE = f"/tmp/neurobranch_simp_{args.worker_id}"
+    print(f"[apply] worker_id = {args.worker_id}", flush=True)
+    print(f"[apply] SHM_FILE = {SHM_FILE}", flush=True)
     
     # 确保文件存在
     os.system(f"touch {SHM_FILE}")
+    # print("神经网络开始求解")
     python_nn_process(SHM_FILE)
